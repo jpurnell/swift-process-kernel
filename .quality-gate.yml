@@ -1,0 +1,11 @@
+# This package IS the kernel.
+#
+# `bounded-io` permits unbounded subprocess primitives — Process(),
+# readDataToEndOfFile(), waitUntilExit() — in exactly one file per repository, on
+# the argument that confinement is checkable where boundedness is not. Its default
+# path is `Sources/QualityGateCore/ProcessRunner.swift`, which is where this file
+# used to live before it was extracted so that packages quality-gate-swift depends
+# on could use it. Undeclared, the rule told ProcessRunner.swift to "spawn through
+# ProcessRunner" — to route through itself.
+boundedIO:
+  kernelPath: Sources/ProcessKernel/ProcessRunner.swift
