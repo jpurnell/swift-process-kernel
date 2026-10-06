@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Intended to ship as **1.0.1**. Left under this heading until the tag exists, because the
-pre-push hook refuses a version name that has no tag behind it.
+## [1.1.0] — 2026-10-06
+
+Prepared as 1.0.1 and released as 1.1.0: it adds public API (`ProcessRunner.InvalidTimeout`,
+`ProcessRunner.maximumTimeout`) and a non-finite timeout now throws where it used to wait
+with no deadline, which is more than a patch.
 
 ### Fixed
 
@@ -66,5 +69,6 @@ pre-push hook refuses a version name that has no tag behind it.
   readers exist to prevent. That corpus is why this is a package rather than a
   snippet worth copying.
 
-[Unreleased]: https://github.com/jpurnell/swift-process-kernel/compare/1.0.0...HEAD
+[Unreleased]: https://github.com/jpurnell/swift-process-kernel/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/jpurnell/swift-process-kernel/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/jpurnell/swift-process-kernel/releases/tag/1.0.0
