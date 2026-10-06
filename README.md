@@ -48,6 +48,12 @@ Timeouts return exit code 124 — the convention GNU `timeout` uses — with a n
 appended to stderr, rather than throwing. A caller reading only the code can
 still tell a timeout from an ordinary failure.
 
+A timeout that would mean *no deadline* is refused instead: a NaN, an infinity, or
+anything past `ProcessRunner.maximumTimeout` (one billion seconds) throws
+`ProcessRunner.InvalidTimeout` before the child is started. Zero or a negative
+number is a budget already spent — what `deadline.timeIntervalSinceNow` returns
+after the deadline — and is answered with 124 like any other timeout.
+
 ## Provenance
 
 Extracted from `quality-gate-swift`, where each of the behaviours above was

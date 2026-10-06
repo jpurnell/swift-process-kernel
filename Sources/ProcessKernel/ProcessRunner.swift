@@ -45,6 +45,75 @@ public enum ProcessRunner: Sendable {
         public let exitCode: Int32
     }
 
+    /// A timeout ``run(_:arguments:currentDirectory:environment:stdin:mergeStderr:timeout:)``
+    /// will not act on.
+    ///
+    /// Each of these, passed through, would have meant *no deadline*: `DispatchTime + Double`
+    /// saturates a NaN, an infinity and anything past ~292 years to `DISPATCH_TIME_FOREVER`.
+    /// A runner whose purpose is the deadline does not quietly run without one, and it does not
+    /// quietly substitute a different deadline either — so the caller is told, before the
+    /// child is started.
+    ///
+    /// Zero and negative timeouts are **not** here. They are a budget already spent, and are
+    /// answered with exit code 124.
+    public enum InvalidTimeout: Error, Equatable, Sendable, CustomStringConvertible {
+        /// The timeout was a NaN — usually `0 / 0` or an uninitialised measurement upstream.
+        case notANumber
+        /// The timeout was `+infinity` or `-infinity`.
+        case infinite
+        /// The timeout was finite but past ``ProcessRunner/maximumTimeout``. Carries the value
+        /// that was passed.
+        case exceedsMaximum(TimeInterval)
+
+        /// What was wrong, and that nothing was run.
+        public var description: String {
+            switch self {
+            case .notANumber:
+                return "process-kernel: the timeout is not a number. Nothing was run."
+            case .infinite:
+                return "process-kernel: the timeout is infinite, and a run with no deadline is the one thing this runner does not offer. Nothing was run."
+            case .exceedsMaximum(let timeout):
+                return "process-kernel: the timeout of \(timeout)s is past the maximum of \(ProcessRunner.maximumTimeout)s. Nothing was run."
+            }
+        }
+    }
+
+    /// The longest timeout accepted: one billion seconds, a little under 32 years.
+    ///
+    /// The bound exists because the deadline is kept as nanoseconds in an `Int64`, which runs
+    /// out near 9.2 billion seconds; past that, dispatch treats the wait as unbounded. One
+    /// billion is the round figure safely inside it. Nothing legitimately waits this long — it
+    /// is the line between a long deadline and no deadline at all.
+    public static let maximumTimeout: TimeInterval = 1_000_000_000
+
+    /// Refuses a timeout that would mean no deadline.
+    ///
+    /// - Parameter timeout: The caller's wall-clock budget, in seconds.
+    /// - Throws: ``InvalidTimeout`` for a NaN, an infinity, or a value past ``maximumTimeout``.
+    private static func validate(timeout: TimeInterval) throws {
+        guard !timeout.isNaN else { throw InvalidTimeout.notANumber }
+        guard timeout.isFinite else { throw InvalidTimeout.infinite }
+        guard timeout <= maximumTimeout else { throw InvalidTimeout.exceedsMaximum(timeout) }
+    }
+
+    /// How long a timed-out run was allowed, as the timeout note words it.
+    ///
+    /// - Parameter timeout: A timeout that ``validate(timeout:)`` has already accepted.
+    /// - Returns: `"30s"` for a whole number of seconds and `"0.5s"` for a fractional one —
+    ///   the figure as given, never truncated. For zero or a negative timeout, `"0s"` followed
+    ///   by the budget that was passed, since no time was allowed and the caller should see why.
+    private static func elapsedDescription(of timeout: TimeInterval) -> String {
+        guard timeout > 0 else {
+            return "0s — its budget of \(timeout)s was already spent —"
+        }
+        // `maximumTimeout` is far inside Int's range, so a whole value in bounds converts
+        // exactly; anything else — a fraction — is printed as the Double it is.
+        guard timeout <= maximumTimeout, let whole = Int(exactly: timeout) else {
+            return "\(timeout)s"
+        }
+        return "\(whole)s"
+    }
+
     /// Disarms SIGPIPE, once, before the first stdin payload is written.
     ///
     /// Writing to a pipe whose reader has gone raises SIGPIPE, and its default disposition
@@ -82,7 +151,19 @@ public enum ProcessRunner: Sendable {
     ///     **a timeout is a finding, not a crash**, and the caller decides what it means. The
     ///     default is generous because a cold build of a large package legitimately takes
     ///     minutes; what it rules out is *forever*.
+    ///
+    ///     Zero or a negative number is a budget already spent — what
+    ///     `deadline.timeIntervalSinceNow` returns once the deadline has passed. The child is
+    ///     started and terminated at once, and the run reports exit code 124 like any other
+    ///     timeout, with the figure that was passed named in `stderr`.
+    ///
+    ///     A NaN, an infinity, or anything past ``maximumTimeout`` is refused with
+    ///     ``InvalidTimeout`` before the child is started. None of them is clamped: each would
+    ///     otherwise mean *no deadline*.
     /// - Returns: The captured output and exit code.
+    /// - Throws: ``InvalidTimeout`` if `timeout` is not a number, is infinite, or is past
+    ///   ``maximumTimeout`` — thrown before anything is spawned. Otherwise whatever
+    ///   `Process.run()` throws, typically because `executablePath` cannot be executed.
     public static func run(
         _ executablePath: String,
         arguments: [String] = [],
@@ -92,6 +173,9 @@ public enum ProcessRunner: Sendable {
         mergeStderr: Bool = false,
         timeout: TimeInterval = 600
     ) throws -> Output {
+        // Judged before anything is spawned, so a refusal leaves nothing to clean up.
+        try validate(timeout: timeout)
+
         let process = Process() // SAFETY: callers pass hardcoded executable paths
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
@@ -247,11 +331,10 @@ public enum ProcessRunner: Sendable {
         let capturedStderr = String(data: stderrData, encoding: .utf8) ?? ""
 
         if timedOut {
-            let seconds = Int(timeout)
             return Output(
                 stdout: String(data: stdoutData, encoding: .utf8) ?? "",
                 stderr: capturedStderr
-                    + "\nprocess-kernel: `\(executablePath)` timed out after \(seconds)s and was terminated.",
+                    + "\nprocess-kernel: `\(executablePath)` timed out after \(elapsedDescription(of: timeout)) and was terminated.",
                 // 124 is the conventional timeout exit code (GNU `timeout`), so a caller
                 // reading only the code can still tell this apart from an ordinary failure.
                 exitCode: 124

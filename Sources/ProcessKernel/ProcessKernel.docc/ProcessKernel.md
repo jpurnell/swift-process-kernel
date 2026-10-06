@@ -54,6 +54,25 @@ A timeout returns exit code `124` — the convention GNU `timeout` uses — with
 note appended to stderr, rather than throwing. A caller reading only the status
 can still tell a timeout from an ordinary failure.
 
+## A timeout that is not an ordinary number
+
+The timeout is computed by callers, and arithmetic produces values that are not
+a positive number of seconds. Each has an answer:
+
+| `timeout` | What happens |
+| :--- | :--- |
+| NaN | throws ``ProcessRunner/InvalidTimeout/notANumber`` |
+| An infinity, of either sign | throws ``ProcessRunner/InvalidTimeout/infinite`` |
+| Finite, past ``ProcessRunner/maximumTimeout`` | throws ``ProcessRunner/InvalidTimeout/exceedsMaximum(_:)`` |
+| Zero or negative | exit code `124`: the budget was already spent |
+
+The three refusals are thrown before the child is started. Left alone, each of
+those values would have been a wait with no deadline, because dispatch saturates
+them to *forever* — and none is clamped to something shorter, because a deadline
+the caller did not ask for is a different bug. A negative timeout is not a
+malformed request: it is what `deadline.timeIntervalSinceNow` returns once the
+deadline has passed.
+
 ## This package is its own bounded-IO kernel
 
 The unbounded primitives above live in `ProcessRunner.swift` and nowhere else,
@@ -66,3 +85,8 @@ them is checkable; proving any particular wait is bounded is not.
 
 - ``ProcessRunner``
 - ``ProcessRunner/Output``
+
+### Timeouts
+
+- ``ProcessRunner/InvalidTimeout``
+- ``ProcessRunner/maximumTimeout``
