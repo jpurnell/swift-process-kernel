@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `.quality-gate.yml` now configures the `consistency` checker (corpus path, project id, threshold 0.7, risk tier 2),
+  so the gate scores this package against the organisation's recorded judgements. No source change; not a release.
+
 ## [1.1.0] — 2026-10-06
 
 Prepared as 1.0.1 and released as 1.1.0: it adds public API (`ProcessRunner.InvalidTimeout`,

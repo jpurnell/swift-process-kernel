@@ -9,3 +9,9 @@
 # ProcessRunner" — to route through itself.
 boundedIO:
   kernelPath: Sources/ProcessKernel/ProcessRunner.swift
+
+consistency:
+  corpusPath: /Users/jpurnell/Dropbox/Computer/Development/Swift/Tools/org-judgement-corpus
+  projectID: swift-process-kernel
+  consistencyThreshold: 0.7
+  defaultRiskTier: 2
